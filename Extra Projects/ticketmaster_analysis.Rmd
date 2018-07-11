@@ -1,0 +1,477 @@
+---
+title: "The Guardians of the Gamma Distribution"
+author: "Jinkun Ma, Nelson Tian, Jackie Cervantes, Adam Bushnell"
+date: "6/14/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Ticketmaster data**
+Our team name is The Guardians of the Gamma Distribution and we are working on the Ticketmaster data set that was used for DataFest 2016. The Ticketmaster contains three seperate data sets: purchase, user behavior, and adworks. We decided to go ahead and use all three sets because they each contain important variables that can provide useful insights. We chose Ticketmaster because as customers we thought it would be interesting to see if there is a particular group of people who purchase tickets and if so then how could we improve Ticktmaster sales. 
+
+For this project, we worked with the purchase dataset in the Ticketmaster data to see if there are any notable trends in consumer purchases. Below each chunk is commentary explaining the tests run on each chunk and the interesting observations that emerge from them.
+
+
+```{r} 
+# Install necessary packages
+library(tidyverse) 
+library(class)
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(grid)
+library(data.table)
+library(lubridate)
+library(tidytext)
+library(wordcloud)
+library(wesanderson)
+```
+
+
+
+```{r}
+options(max.print=9999999)
+setwd("/Users/jackie/Documents/DataFest Prep/2016/Data and Codebook")
+
+# Read in data
+purchase <- data.table::fread('approved_data_purchase-v5.csv') 
+behavior <- data.table::fread('approved_ga_data_v2.csv')
+ad <- data.table::fread('approved_adwords_v3.csv') 
+```
+
+```{r} 
+# Filter out variables for purchase data set
+purchase.filtered<- select(purchase, event_id, la_event_type_cat, tickets_purchased_qty, trans_face_val_amt, delivery_type_cd,event_dt, timezn_nm, venue_state,venue_postal_cd_sgmt_1,married_ind, gndr_cd,age_yr)
+# There are events that were purchased in advance. Some as far as 20 years.
+
+# Filter out variables of interest for behavior data set
+behavior.filtered<- select(behavior,event_id, visitnumber,totals_visits,totals_hits,totals_pageviews, totals_timeonsite, totals_bounces, source, medium, device_browser,
+                           device_devicecategory,device_operatingsystem, keyword)
+
+```
+
+
+```{r}
+# Use purchased.filtered data set and remove NA's, NULL, and empty columns in the marriage column
+no_NA_marriage <- purchase.filtered %>%
+  filter(!is.na(married_ind) , married_ind != "NULL", !is.na(gndr_cd), !is.na(age_yr), gndr_cd != "NULL", age_yr != "NULL")
+
+marriage.clean <- subset(no_NA_marriage, married_ind != "")
+
+# Subset beahvior.filtered data set to removed NA's included in behavior.filtered dataset
+no_NA_behavior <- behavior.filtered %>%
+  filter(!is.na(totals_timeonsite))
+
+# Do married couples always purchase 2 tickets 
+# 58,533 observations fit our criteria
+# Subset married couple where indicator is a 1
+married.2tkt<- subset(marriage.clean, tickets_purchased_qty == 2, married_ind == 1) # 1,576 obs # married and purchased 2 tickets
+
+married<- subset(marriage.clean, married_ind == 1, tickets_purchased_qty != 2) 
+
+# Married couples
+ggplot(marriage.clean)+
+  geom_bar(mapping = aes(x = tickets_purchased_qty ,fill = married_ind), position = "fill")+
+  xlab("Amount of tickets purchased")+ #country of customer interaction
+  scale_y_continuous(breaks=seq(0, 15, 1))+
+  ylab("Percentage")+
+  labs(title="Tickets purchased: Married vs Single")+
+  scale_fill_manual(values = c("#006e85","#3e525c"))+
+  #scale_colour_manual(name = 'the colour', labels = c('No','Yes'))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+   
+
+
+```
+We can see that customers who are married (dark gray) tend to purchase more tickets. 
+```{r}
+# Male vs Female
+ggplot(marriage.clean)+
+  geom_bar(mapping = aes(x = tickets_purchased_qty ,fill = gndr_cd), position = "fill")+
+  xlab("Amount of tickets purchased")+ 
+  scale_x_continuous(breaks=seq(0,15,by=1),labels=seq(0,15,by=1))+
+  ylab("Percentage")+
+  labs(title="Tickets purchased: Male vs Female")+
+  scale_fill_manual(values = c("#bf8fa2","#671e45"))+
+  #scale_colour_manual(name = 'the colour', labels = c('No','Yes'))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+   
+  
+```
+Females tend to purchase more tickets than males.
+
+```{r}
+purchase.filtered <- select(purchase, event_id, event_name, tickets_purchased_qty,primary_act_name, age_yr, gndr_cd,child_present_ind,dist_to_ven, venue_city, venue_state, sales_platform_cd,event_dt, onsale_dt, presale_dt, onsale_dt, la_event_type_cat, married_ind) %>% filter( tickets_purchased_qty != "NULL" & presale_dt != "NULL" &  onsale_dt != "NULL"  & presale_dt != "NA" &  onsale_dt != "NA") 
+
+```
+
+##Data Sets created to compare Pre-Sale Length with other variables
+```{r, echo = FALSE}
+purchased.date <- select(purchase.filtered, tickets_purchased_qty, presale_dt, onsale_dt, gndr_cd, la_event_type_cat, married_ind, age_yr) %>%
+  group_by(gndr_cd)%>%
+  mutate(presale_length = as.numeric( days(ymd(onsale_dt) - ymd(presale_dt)))/60/60/24) %>% 
+  mutate(total= sum(tickets_purchased_qty))
+
+#Pre-Sale Length and Gender (UNUSED)
+purchase.gndr <- purchased.date %>% select(presale_length, tickets_purchased_qty, gndr_cd, la_event_type_cat) %>% 
+  group_by(gndr_cd) %>%
+  filter(gndr_cd != "NA" ) %>%
+  filter(gndr_cd != "NULL" ) %>%
+  filter(gndr_cd != "") %>%
+  filter(presale_length > -1) %>%
+  mutate(total= sum(tickets_purchased_qty)) 
+
+
+#Pre-Sale Length and Age
+purchase.age <- purchased.date %>% select(presale_length, tickets_purchased_qty, age_yr, la_event_type_cat) %>% 
+  group_by(age_yr) %>%
+  filter(age_yr != "NA" ) %>%
+  filter(age_yr != "NULL" ) %>%
+  filter(age_yr != "") %>%
+  filter(presale_length > -1) %>%
+  mutate(total= sum(tickets_purchased_qty))
+
+
+#Pre-Sale Length and Event Type
+purchase.event.ty <- purchased.date %>% select(presale_length, tickets_purchased_qty, gndr_cd, la_event_type_cat) %>% 
+  group_by(la_event_type_cat) %>%
+  filter(presale_length > -1) %>%
+  mutate(total= sum(tickets_purchased_qty)) 
+
+
+#Pre-Sale Length and Marriage Status
+purchase.marr <- purchased.date %>% select(presale_length, tickets_purchased_qty, married_ind) %>% 
+  group_by(married_ind) %>%
+  filter(married_ind != "NA" ) %>%
+  filter(married_ind != "NULL" ) %>%
+  filter(married_ind != "") %>%
+  filter(presale_length > -1) %>%
+  mutate(total= sum(tickets_purchased_qty))
+```
+**Report**
+In this chunk, I wanted to create seperate data sets to create plots with. The variables chosen; Age, Marriage, Gender, Event Type; were chosen out of not specific order, only because they appeared to be variables that could impact Pre-Sale length. From the Data, some negative lengths were derived, since I define Pre-Sale dates as ones that come before Sale-Dates, those instances were disreguarded and treated as errors.
+
+#Plots
+```{r, echo = FALSE}
+#Geom_Boxplot to Justify Cut off 
+fill <- "gold1"
+line <- "goldenrod2"
+Presale<- purchase.event.ty$presale_length
+ggplot(data = purchase.event.ty, aes(x = total, y = Presale)) +
+  geom_boxplot(outlier.colour="blue",  notch=FALSE, fill = fill, colour = line) +
+  coord_flip()  +
+  labs(title="Presale length")+
+  ylim(0,25) +
+  theme_minimal()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+   panel.background = element_rect(fill="grey"))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+
+
+
+#Plot for Event Types
+ggplot(data = purchase.event.ty, mapping =  aes(x = presale_length, fill = as.factor(la_event_type_cat)), position = "fill" ) +
+  geom_bar() +
+  xlim(0,25) +
+  guides(fill = guide_legend(title = "Event Type")) +
+  labs(x = "Length of Time between Pre-Sale Date and Sale Date",y = "Tickets Sold") +
+  theme_minimal()+
+  ggtitle("Event Types and Pre-Sale Purchases") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+
+
+#Plot for Marrital Status
+ggplot(data = purchase.marr, mapping =  aes(x = presale_length, fill = as.factor(married_ind)), position = "fill" ) +
+  geom_bar() +
+  xlim(0,25) +
+  scale_fill_manual(values = c("#8651c2","#5159c2"))+
+  guides(fill = guide_legend(title = "Marrital Status")) +
+  labs(x = "Length of Time between Pre-Sale Date and Sale Date",y = "Tickets Sold") +
+  theme_minimal() +
+  ggtitle("Marriage and Pre-sale Purchases") +
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+
+
+#Plot for Age
+ggplot(data = purchase.age, mapping =  aes(x = presale_length, fill = as.factor(age_yr)), position = "fill" ) +
+  geom_bar() +
+  xlim(0,25) +
+  guides(fill = guide_legend(title = "Age")) +
+  labs(x = "Length of Time between Pre-Sale Date and Sale Date",y = "Tickets Sold") +
+  theme_minimal() +
+  ggtitle("Age and Pre-sale Purchases") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+**Report**
+This Chunk is where I generate my plots to observe the variables. I did not include the plot for age since it didnt appear to have any importance to the data. I've also included a boxplot to help justify my reasoning for zooming in on the data at an x range of 0 to 25. There were alot of outlier for the Pre-Sale length.
+
+
+**Google Adwords Dataset Analysis**
+
+```{r}
+set.seed(167)
+```
+
+Data Cleaning an Transforming
+
+```{r}
+adFilteredraw <- select(ad, ad_group:conv.rate, -account, -week)
+adFilteredraw$conversions <- as.integer(gsub("[^0-9.]", "", adFilteredraw$conversions))
+# Filter out useless variables
+adFiltered <- filter(adFilteredraw, clicks >= converted.clicks, clicks <= impressions, clicks >= conversions)
+# Some observation have clicks less than converted.clicks, and clicks more than impressions, which are unreasonable
+adFilteredenabled <- filter(adFiltered, keyword.state == "enabled")
+# Use enabled advertisement observation
+adFilteredenabled$ctr <- adFilteredenabled$clicks / adFilteredenabled$impressions
+adFilteredenabled$click.conversion.rate <- adFilteredenabled$clicks / adFilteredenabled$conversion
+adFilteredenabled$conv.rate <- adFilteredenabled$conversions / adFilteredenabled$clicks
+adFilteredenabled$max_cpc <- as.numeric(gsub("[^0-9.]", "", adFilteredenabled$max_cpc))
+```
+
+Which Keyword match type is a better one.
+
+```{r}
+
+typeCTR <- adFilteredenabled %>% group_by(match.type) %>% summarise(meanCTR = mean(ctr)) %>% arrange(meanCTR)
+typeIMPR <- adFilteredenabled %>% group_by(match.type) %>% summarise(meanIMPR = mean(impressions)) %>% arrange(meanIMPR)
+typeConCTR <- adFilteredenabled %>% group_by(match.type) %>% summarise(meanConCTR = mean(conv.rate, na.rm = T)) %>% arrange(meanConCTR)
+
+ggplot(data = typeCTR, aes(x = match.type, y = meanCTR)) +
+  geom_bar(stat = "identity", aes(fill = match.type))+
+  labs(x = "Match Type", y = "CTR", fill = "Match Type")+
+  scale_fill_manual(values = c("#84c2ff","#5159c2","#09077a"))+
+  theme_get()+
+  theme_update(plot.background = element_rect(fill="white"), axis.title.x = element_text(colour = "black"))+
+  theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+
+  
+
+ggplot(data = typeIMPR, aes(x = match.type, y = meanIMPR)) +
+  geom_bar(stat = "identity", aes(fill = match.type))+
+  labs(x = "Match Type", y = "Impressions", fill = "Match Type")+
+  scale_fill_manual(values = c("#84c2ff","#5159c2","#09077a"))+
+   theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+  
+
+ggplot(data = typeConCTR, aes(x = match.type, y = meanConCTR)) +
+  geom_bar(stat = "identity", aes(fill = match.type))+
+  labs(x = "Match Type", y = "Conversion CTR", fill = "Match Type")+
+  scale_fill_manual(values = c("#84c2ff","#5159c2","#09077a"))+
+   theme_minimal()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 20))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+```
+
+Multiple linear regression Analysis
+
+```{r}
+noNaCPC <- filter(adFilteredenabled, !is.na(max_cpc))
+largeImpression <- filter(noNaCPC, impressions > 100)
+largeImpression$cost <- as.numeric(gsub("[^0-9.]", "", largeImpression$cost))
+
+x <- glm(avg_cpc ~ avg_position + quality.score + first.page.cpc + first.position.cpc + cost, data = largeImpression)
+summary(x)
+```
+
+Building our own model and cross validation
+
+```{r}
+dim(largeImpression)
+set.seed(167)
+train <- sample(dim(largeImpression)[1], dim(largeImpression)[1] / 2)
+train.mse <- rep(0, 10)
+test.mse <- rep(0, 10)
+for (i in 1:10) {
+  glm.train <- glm(avg_cpc ~ poly(avg_position, i) + poly(quality.score, 1) + poly(first.page.cpc, 1) + poly(first.position.cpc, 1) + poly(cost, 1), data = largeImpression, subset = train)
+  train.mse[i] <- mean((largeImpression$avg_cpc - predict(glm.train))[train]^2)
+  test.mse[i] <- mean((largeImpression$avg_cpc - predict(glm.train))[-train]^2)
+}
+train.mse
+test.mse
+
+validation.set <- tibble(degree = 1:10,
+                         train.mse = train.mse, test.mse= test.mse)
+ggplot(data = validation.set, mapping = aes(x=degree)) +
+  geom_point(aes(y=train.mse), color="blue") +
+  geom_line(aes(y=train.mse), color="blue") +
+  geom_point(aes(y=test.mse), color="red") +
+  geom_line(aes(y=test.mse), color="red") +
+  ylab("MSE")
+# set.seed(167)
+glm.train <- glm(avg_cpc ~ poly(avg_position, 1) + poly(quality.score, 1) + poly(first.page.cpc, 1) + poly(first.position.cpc, 1) + poly(cost, 1), data = largeImpression, subset = train)
+mean((largeImpression$avg_cpc - predict(glm.train))[train]^2)
+mean((largeImpression$avg_cpc - predict(glm.train))[-train]^2)
+glm.train <- glm(avg_cpc ~ avg_position + quality.score + cost, data = largeImpression, subset = train)
+mean((largeImpression$avg_cpc - predict(glm.train))[train]^2)
+mean((largeImpression$avg_cpc - predict(glm.train))[-train]^2)
+```
+
+**Working with the purchase dataset:**
+```{r}
+# make a new dataset to keep purchase intact
+purchase.clean <- purchase
+
+# make a date variable
+purchase.clean$date <- as.Date(purchase.clean$event_dt)
+# use class() and head() to make sure that the new variable is made properly
+class(purchase.clean$date)
+head(purchase.clean$date)
+head(month(purchase.clean$date))
+```
+Here, I duplicated the purchase dataset to keep it intact while I worked with an identical dataset called purchase.clean. I converted the event date to a Date variable here to cleanly extract the month for both plotting in the bar chart below and including as an independent variable in the regression later on.
+
+
+
+**Plot the data:**
+```{r}
+# plot the ticket purchases by month, color coded by the event type
+ggplot(data = purchase.clean) +
+  geom_bar(aes(x = month(purchase.clean$date), y = ..count.., fill = la_event_type_cat), position = "stack") + 
+  scale_x_continuous(breaks = c(1:12)) +
+  guides(fill=guide_legend(title="Event Type")) +
+  ggtitle("Ticket Purchases by Month, Separated by Event Type") +
+  xlab("Month") +
+  ylab("Purchases") +
+  theme_light() +
+  theme(plot.title = element_text(size = 14)) +
+  theme(axis.title = element_text(size = 14))+
+   theme_minimal()+
+  theme(axis.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 15))+
+  theme(plot.title = element_text(family = "Trebuchet MS", color = "#666666", face = "bold", size = 16))+
+  theme(plot.title = element_text(hjust = 0.5))+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+Here, I plotted a stacked bar chart that counted the purchases made per month, color-coded by the event type. The most interesting thing to note here is that most consumers actually purchase near the summer time between June and September, and that the purchases by month follows closely to a neat bell curve. Most of the purchases are actually parking tickets, which is to be expected because consumers would usually have to park somewhere close to the event to actually go see it, which is why parking makes up half of the data, more or less.
+
+
+
+**Perform a logistic regression:**
+```{r}
+# create a month variable as a factor for modeling
+purchase.clean$month <- as.factor(month(purchase.clean$date))
+# class() and head() to double check
+class(purchase.clean$month)
+head(purchase.clean$month)
+
+# create a factor variable for delivery type
+# first check all the delivery types
+unique(purchase$delivery_type_cd)
+# make the new factor variable between electronic (1) and physical (0)
+purchase.clean$delivery <- ifelse(purchase.clean$delivery_type_cd == "TicketFast" |
+                                  purchase.clean$delivery_type_cd == "eTicket" |
+                                  purchase.clean$delivery_type_cd == "Paperless",
+                                  1, 0)
+# head() to double check
+head(purchase.clean$delivery)
+head(purchase.clean$delivery_type_cd)
+# convert new delivery variable to a factor
+purchase.clean$delivery <- as.factor(purchase.clean$delivery)
+# class() to double check
+class(purchase.clean$delivery)
+
+# now make a factor for event type
+is.factor(purchase.clean$la_event_type_cat)
+purchase.clean$event_type <- as.factor(purchase.clean$la_event_type_cat)
+class(purchase.clean$event_type)
+
+# perform a logistic regression on delivery type based on event type and month
+delivery.lm <- glm(delivery ~ event_type + month, purchase.clean, family = "binomial")
+summary(delivery.lm)
+```
+Here, I perform a logistic regression on the purchase data. The initial plan was to perform a regression on two event types (say, Sports and Concerts), to see if any factors such as gender, age, or event month would differ between event types. The dataset, however, is missing all demographic information for every event type except for the less interesting types like Parking or Invalid. Therefore, it was impossible to do a test like this because the demographic information is extremely unclean and is missing for many rows. I infer that the reason why the demographics are missing from almost every category might be because the demographic data is stored in the customer's first purchase (which will likely be Parking) and is not reentered in the other tickets that the customer might buy, so categories like Sports and Concerts will have no demographic information attached to them.
+Instead, I perform a logistic regression on the delivery method of the ticket and whether event type or month would affect this. The seven delivery types are TicketFast, Mail, eTicket, UPS, ISPU, BWC, Paperless, and KioskCli. After searching up Ticketmaster's delivery methods, I have aggregated eTicket, Paperless, and TicketFast to "electronic" delivery (represented as 1) and the rest to "physical" delivery (represented as 0). After performing the regression, I have noticed that events like Concerts and Parking tend to have physical tickets while events like Sports tend to have electronic tickets. With this, I would recommend TicketMaster to advertise more convenient ways to pick up a physical ticket (such as a search function to find the closest ticket pick-up location) for events that tend to require physical tickets or recommend the hassle-free electronic delivery for events that accept electronic tickets.
+
+
+**Make a wordcloud:**
+```{r}
+# make a new dataframe with just the event names from purchase.clean
+event.text <- data_frame(purchase.clean$event_disp_name)
+# change the name of the column to Event_Name
+names(event.text)[1] <- "Event_Name"
+# extract the words from the event names and sort by most common ones
+text.df <- event.text %>%
+  unnest_tokens(word, Event_Name) %>%
+  count(word, sort = T) %>%
+  # remove the stop_words (common words like "the", "a", etc.)
+  anti_join(stop_words)
+
+# convert the integer "n" (number of times a word appears) to a numeric
+text.df$n <- as.numeric(text.df$n)
+# class() to double check
+class(text.df$n)
+
+# make the wordcloud with every word in it
+text.df %>%
+  with(wordcloud(word, n, max.words=50))
+
+# take out premier and parking because those are already expected to be extremely common
+omit.parking <- text.df %>%
+  filter(word != "premier" & word != "parking") %>%
+  with(wordcloud(word, n, max.words=50))
+
+```
+Here, I represented the most common words found in the event names into a word cloud with the intention of finding certain events that customers prefer. The most common words, of course, will be Premier Parking because Parking is such a common event type in this dataset, so I made a second wordcloud with that omitted. Now, the cloud says words like "tour," "band," some locations such as "Gorge" "Ampitheatre," and some well known artists such as "Beyonce" and "Dave" "Matthews." Based on this cloud, I would recommend Ticketmaster to advertise events that feature popular venues like the Gorge Ampitheatre or popular performers like Beyonce.
+
+
+
+
+
+
+
+** Contribution **
+Nelson worked primarily with the purchases dataset. He created the bar chart that plotted purchases vs. month. He also performed logistic regression on the effect of months and event type on the delivery type of the ticket, and made the word cloud with the most common words in the event names excluding stop words.
+
+Jackie worked on the purchase and behavior data set. Primarily on exploratory analysis and visualizations. She was also in charge of putting together the report. Also helped in the writeup and interpretation of the data.
+
+Jinkun worked on the google adworks data and produced barplots in order to compare google adwords match type keywords. He also fit a generalized linear model in otder to determine significant variables. Also produced a ploynomial linear regression and performed cross validation.
+
+On this project, Adam chose to focus on creating a new variable for the purchase data set. The variable Adam made took into account the length of time between the pre-sale and full-sale tickets were released to the public. With that, Adam could visualize how certain variables respond to the intervals of time and at what length of time more tickets are sold. Using graphs, some interesting observations came to light, observations such as how age played a part in the amount of tickets sold and how marriage affects pre-sale purchases. 
+
+
+
+
+
