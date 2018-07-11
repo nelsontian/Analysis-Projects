@@ -4,7 +4,7 @@ This is a joint project done by Michael Gutierrez, Michelle Li and Nelson Tian
 on optimizing a stock investment portfolio with stock data extracted from Yahoo! Finance
 and presented to the members of Hylander Financial Group (HFG)
 """
-# inline in console
+# inline if using notebook
 # %matplotlib inline
 
 # packages
