@@ -901,11 +901,13 @@ TukeyHSD(anov)
 
 ```{r lbq}
 # bring lbq (language background variables) into analysis
-lbq <- read.csv("Data.csv")
+lbq <- read.csv("lbq_data_cleaned.csv")
 colnames(lbq) = c("subject","thinking",
                   "l1read","l1write","l1listen","l1speak","l1vocab","l1grammar","l1avg",
                   "l2read","l2write","l2listen","l2speak","l2vocab","l2grammar","l2avg",
-                  "l3","multiYN","multi","CultureUS","CultureH","MoveUS","EngAoA")
+                  "l3","multiYN","multi","CultureUS","CultureH","MoveUS","EngAoA",
+                  "TVSp","MovSp","MediaSp","AvgSp","TVEn","MovEn","MediaEn","AvgEn")
+
 # subject-level analysis
 subjects <- all %>%
   filter(condition == "Causative") %>%
@@ -961,7 +963,8 @@ dev.off()
   
 # trim out fat from lbq
 modellbq <- lbq %>%
-  select(subject, MoveUS, EngAoA, l1avg, l2avg)
+  select(subject,MoveUS,EngAoA,l1avg,l2avg,
+         TVSp,MovSp,MediaSp,TVEn,MovEn,MediaEn)
 
 # merge trial level data with verb data
 all_new <- merge(x = all, y = allverbn, by = "verb", all.x = TRUE)
@@ -973,6 +976,17 @@ caus_new$rating <- factor(caus_new$rating, ordered = TRUE, levels = c("1","2","3
 caus_new <- merge(caus_new, lbq, by = "subject")
 caus_bil <- caus_new %>%
   filter(group %in% c("Heritage Speakers", "Early Bilinguals", "Late Bilinguals"))
+
+# correlations between different variables
+caus_corr <- caus_bil %>%
+  select(zipf,stimNum,EngAoA,MoveUS,l1avg,l2avg)
+caus_res <- cor(caus_corr, use = "complete.obs")
+round(caus_res, 2)
+# another one for language exposure
+caus_corr2 <- caus_bil %>%
+  select(TVSp,MovSp,MediaSp,TVEn,MovEn,MediaEn)
+caus_res2 <- cor(caus_corr2, use = "complete.obs")
+round(caus_res2, 2)
 
 # linear mixed effects models
 zipf_lm <- lmer(rating ~ group + (1|verb) + (1|subject), data = caus_new)
@@ -987,8 +1001,11 @@ anova(zipf_full, zipf_inter)
 zipf_only <- glmer(rating ~ zipf + (1|verb) + (1|subject), family = poisson, data = caus_new)
 
 # rating is now a categorical variable, use clmm for ordinal mixed effects regression
-zipf_clmm <- clmm(rating ~ zipf + stimNum + group + group:stimNum + (1|verb) + (1|subject), data = caus_new)
-zipf_clmm <- clmm(rating ~ zipf + stimNum + EngAoA + MoveUS + l1avg + l2avg + (1|verb) + (1|subject), data = caus_bil)
+zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_new)
+zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_new)
+# remove group labels, look closer at bilingual groups
+zipf_clmm <- clmm(rating ~ zipf + stimNum + EngAoA + MoveUS + (1|verb) + (1|subject), data = caus_bil)
+zipf_clmm <- clmm(rating ~ zipf + stimNum + MoveUS + l1avg + l2avg + (1|verb) + (1|subject), data = caus_bil)
 summary(zipf_clmm)
 ```
 
