@@ -1,0 +1,332 @@
+---
+title: "Ratings Data"
+author: "Nelson Tian, Eve Higby"
+output: html_document
+---
+
+
+This file is the first of a series of three .Rmd files. The other files are:
+2. ratings_vis.Rmd
+3. ratings_analysis.Rmd
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Set working directory in console
+```
+
+```{r packages, results="hide", message = FALSE}
+# for demographics
+library(Rmisc)
+# for data manipulation
+library(dplyr)
+library(data.table)
+library(tidyr)
+# for plots
+library(ggplot2)
+library(ggpubr)
+# for ANOVA
+library(car)
+# for correlation scatters
+library(ggpubr)
+library(gridExtra)
+# for mixed effects model
+library(lme4)
+library(ordinal)
+```
+
+```{r ratings data}
+# This chunk will deal with reading in and cleaning up the ratings data
+
+# Read in cleaned up ratings data file
+ratings <- read.csv("ratings.csv") # 32680 obs
+# ratings <- read.csv("ratings2.csv")
+ecuador <- read.csv("Ecuador_ratings.csv") # 6080 obs
+
+# Remove 3 Ps with no distinction between PsCaus and Trans sentences
+ratings <- subset(ratings, subject != 207 & subject != 304 & subject != 318) #31540 obs
+
+# Remove 2 Ps whose English was too high for the monolingual group
+ratings <- subset(ratings, subject != 302 & subject != 319) #30780 obs
+
+# Subset heritage speakers, early bilinguals, and controls
+  # All HSs
+HS <- subset(ratings, subject %in% c(101, 103, 104, 105, 107, 109, 111, 112, 113, 115, 117, 
+                                     209, 214, 216, 219)) 
+
+# All HS with good ERP data
+#HS2 <- subset(ratings, subject %in% c(101, 103, 107, 111, 112, 113, 115, 117, 214, 219)) 
+
+  # Change group number to 1 for all
+HS$group <- 1
+#HS2$group <- 1
+
+# Early bilinguals that are not heritage speakers
+EB <- subset(ratings, subject %in% c(102,108,110,114,116,118:122,203,213,215,222))
+
+# change group number to 2 for all
+EB$group <- 2
+
+# Late Bilinguals are group 2 that aren't used yet
+LB <- subset(ratings, subject %in% c(201,202,204,205,206,208,210,211,212,218,220,221))
+
+LB$group <- 3
+
+  # All Spanish monolinguals
+SM <- subset(ratings, group == 3)
+
+# Spanish monolinguals with ERP data
+#SM2 <- subset(ratings, subject %in% c(301, 303, 304, 305, 306, 308, 309, 311, 312, 314, 315, 316, 317, 318, 322))
+
+# Change group number to 3 for all
+SM$group <- 4
+#SM2$group <- 3
+
+# all English monolinguals
+EM <- subset(ratings, subject %in% c(401:412,414:422,425,427:429))
+EM$group <- 5
+
+# Combine HS, EB, LB and SM
+# not SM
+all <- rbind(HS,EB)
+all <- rbind(all,LB)
+all <- rbind(all,SM)
+all <- rbind(all,EM)
+  # should be 29 Ps (11020 obs)
+
+# Set up factor variables
+# Make subject, group, and condition factors
+all <- within(all, {
+  subject <- factor(subject)
+  group <- factor(group)
+  condition <- factor(condition)
+  sentFrame <- factor(sentFrame)
+  condition <- factor(condition)
+  stimCode <- factor(stimCode)
+  block <- factor(block)
+  verb <- factor(verb)
+})
+
+
+# Label condition and group levels
+all$condition <- factor(all$condition, levels = c('10', '20', '40', '30', '50', '60', '70'), 
+                            labels=c("10"="Causative", "20"="Pseudo-causative", "40"="Transitive", 
+                                     "30"="Intransitive-D", "50"="Intransitive-S", "60"="Intransitive-PC", 
+                                     "70" = "Filler"))
+
+all$group <- factor(all$group, levels = c('1', '2','3','4','5'), 
+                        labels=c("1"="Heritage Speakers","2"="Early Bilinguals", "3"="Late Bilinguals",
+                                 "4"="Spanish Controls","5"="English Controls"))
+
+# Ecuador data
+ecuador$subject <- ecuador$subject + 300 
+#ecuador$sex <- factor(ecuador$sex, levels = c("Femenino","Masculino"),
+#                      labels = c("Femenino"="Female", "Masculino"="Male"))
+ecuador$condition <- factor(ecuador$condition, levels = c("Causative","Filler","Intransitive (Direct Object)",
+                                                          "Intransitive (Subject)","Intransitive Pseudo-Causative (Direct Object)",
+                                                          "Pseudo-Causative","Transitive (Animate Direct Object)"),
+                            labels = c("Causative"="Causative","Filler"="Filler","Intransitive (Direct Object)"="Intransitive-D",
+                                       "Intransitive (Subject)"="Intransitive-S","Intransitive Pseudo-Causative (Direct Object)"="Intransitive-PC",
+                                       "Pseudo-Causative"="Pseudo-causative","Transitive (Animate Direct Object)"="Transitive"))
+# don't need hand or block, setting to "NA" to make merging easier
+ecuador$hand <- "NA"
+ecuador$block <- "NA"
+ecuador$group <- factor("Ecuador Spanish")
+ecuador <- within(ecuador, {
+  subject <- factor(subject)
+  sentFrame <- factor(sentFrame)
+  condition <- factor(condition)
+  stimCode <- factor(stimCode)
+  verb <- factor(verb)
+})
+ecuador <- ecuador %>%
+  select(subject,age,group,hand,sex,stimNum,condition,rating,rt,sentFrame,stimCode,block,verb)
+
+all <- rbind(all, ecuador) 
+    # should have 17100 obs (45 participants)
+
+## NEW CODE
+# Remove filler condition
+all <- subset(all, condition != "Filler") 
+    # should have 12960 obs
+
+# Add verb labels
+all$verb <- factor(all$verb, levels = c('1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16',
+                                        '18','19','20','21','22','23','24','25','26','27','28','29','30','31','32','33',
+                                        '35','36','37','38','39','40','41','42','43','44','45','46','47','48','50','51'),
+                   labels=c("1"="trotar/jog", "2"="andar/hike", "3"="deambular/stroll", 
+                            "4"="transitar/trek", "5"="avanzar/advance", "6"="gatear/crawl", 
+                            "7"="escalar/climb", "8"="caminar/walk", "9"="brincar/jump",
+                            "10"="marchar/march", "11"="correr/run", "12"="nadar/swim",
+                            "13"="volar/fly", "14"="bailar/dance", "15"="saltar/leap",
+                            "16"="desfilar/parade", "18"="corretear/chase", "19"="escoltar/escort",
+                            "20"="apresurar/hurry", "21"="guiar/guide", "22"="dirigir/direct",
+                            "23"="arrastrar/drag", "24"="jalar/pull", "25"="acompanar/accompany",
+                            "26"="acariciar/pet", "27"="transportar/transport", "28"="observar/observe",
+                            "29"="cargar/carry", "30"="mandar/send", "31"="perseguir/follow",
+                            "32"="lanzar/throw", "33"="conducir/drive", "35"="sudar/sweat",
+                            "36"="estornudar/sneeze", "37"="suspirar/sigh", "38"="roncar/snore",
+                            "39"="tambalearse/wobble", "40"="gemir/growl", "41"="llorar/cry",
+                            "42"="bostezar/yawn", "43"="caer/fall", "44"="temblar/shiver",
+                            "45"="cojear/limp", "46"="dormir/sleep", "47"="vagar/wander",
+                            "48"="sollozar/sob", "50"="respirar/breathe", "51"="reir/laugh"))
+
+# switch order of English Controls (5th group) and Ecuador Spanish (6th group)
+all$group = factor(all$group, levels = c(levels(all$group)[1:4], levels(all$group)[6], levels(all$group)[5]))
+
+# make a resulting excel file called "ratings_full.csv"
+write.csv(all, "ratings_full.csv")
+```
+
+```{r verb data}
+# this chunk creates an auxillary dataframe with frequencies per verb
+
+# ratings data chunk only needs to be run once
+# can read from resulting ratings_full.csv instead after the first time
+if(!exists("all", inherits = FALSE))
+{
+  all <- read.csv("ratings_full.csv")
+  all$group <- factor(all$group, levels = c("Heritage Speakers","Early Bilinguals",
+                                            "Late Bilinguals","Spanish Controls",
+                                            "Ecuador Spanish","English Controls"))
+}
+
+# make a separate dataframe for verbs and combine them with frequencies
+allverb <- levels(all$verb)
+allverb <- data.frame(verb = allverb)
+
+# remove everything before the '/' for English verb (e.g. "trotar/jog" becomes "jog")
+allverb$engverb <- gsub(".*/", "", allverb$verb)
+# remove everything before the '/' for the Spanish verb
+allverb$spnverb <- gsub("/.*", "", allverb$verb)
+
+# excel file with English verbs and frequencies
+eng <- read.csv("engfreq.csv")
+colnames(eng) <- c("engverb", "class", "word", "wordfreq", "engfreq", "ID")
+# only need one instance of each engverb and engfreq
+eng <- eng[,c("engverb","engfreq")]
+eng <- unique(eng)
+# rank variable that ranks by frequency
+eng <- eng[order(-eng$engfreq),]
+eng$engrank <- c(1:length(eng$engfreq))
+
+# do the same for spanish
+spn <- read.csv("spnfreq.csv")
+colnames(spn) <- c("spnverb", "freq", "ppm", "spnfreq","zipf")
+# rank variable that ranks by frequency
+spn <- spn[order(-spn$zipf),]
+spn$spnrank <- c(1:length(spn$spnfreq))
+# only need spnverb and spnverb, and spnrank, and zipf
+spn <- spn[,c("spnverb","spnfreq","spnrank","ppm","zipf")]
+
+allverbn <- merge(x = allverb, y = eng, by = "engverb", all.x = TRUE)
+allverbn <- merge(x = allverbn, y = spn, by = "spnverb", all.x = TRUE)
+
+# # rank each word by frequency
+# allverbn <- allverbn[order(-allverbn$engfreq),]
+# allverbn$rank <- c(1:length(allverbn$verb))
+
+# change to factors
+allverbn <- within(allverbn, {
+  engverb <- factor(engverb)
+  spnverb <- factor(spnverb)
+})
+```
+
+```{r condition data}
+# this chunk creates separate dataframes based on condition for the mean ratings per verb and group
+
+# function to make a plot-ready dataset per condition
+cond_filter <- function(df, cond)
+{
+  df_new <- df %>%
+    # filter by desired condition
+    filter(condition == cond) %>%
+    # get mean ratings per each group and verb combination
+    group_by(.dots=c("group", "verb")) %>%
+    summarise_all(funs(mean(rating, na.rm = TRUE))) %>%
+    # get rid of unnecessary columns, keep only these 3
+    select(group, verb, rating)
+  
+  # merge new columns rank and lemmafreq into the df
+  df_new <- merge(x = df_new, y = allverbn, by = "verb", all.x = TRUE)
+  
+  df_new <- df_new[order(df_new$engrank),]
+  # # reorder the factor levels of each verb based on rank
+  # # df_new$verb = factor(df_new$verb,levels(df_new$verb)[unique(df_new$verb)])
+  df_new$verb = factor(df_new$verb,levels = unique(df_new$verb))
+  
+  return(df_new)
+}
+
+# call the filter for each condition
+caus <- cond_filter(all, "Causative")
+pscaus <- cond_filter(all, "Pseudo-causative")
+trans <- cond_filter(all, "Transitive")
+# we don't need the rest
+# intransD <- cond_filter(all, "Intransitive-D")
+# intransS <- cond_filter(all, "Intransitive-S")
+# intransPC <- cond_filter(all, "Intransitive-PC")
+# filler <- cond_filter(all, "Filler")
+
+# want global average per verb across all non-english groups
+verbavg <- caus %>%
+  filter(group != "English Controls") %>%
+  select(verb, rating)
+verbavg <- aggregate(verbavg[,2], list(verbavg$verb), mean)
+names(verbavg) <- c("verb", "avgrating")
+caus <- merge(caus, verbavg, by = "verb", all = TRUE)
+# rank by global average (reorder factor of verb)
+caus <- caus[order(-caus$avgrating),]
+caus$verb = factor(caus$verb,levels = unique(caus$verb))
+```
+
+```{r ranked csv export}
+# this chunk creates an excel file for each condition containing verbs and ratings sorted for each group
+
+colname <- c("HSverb", "EBverb", "LBverb", "SCverb", "ESverb", "ECverb")
+# rank each verb by rating PER GROUP
+ratingpergroup <- function(df, colname)
+{
+  # for each group
+  for(i in 1:length(levels(df$group)))
+  #for(i in 1:j)
+  {
+    # one group at a time
+    df_temp <- df %>%
+      filter(group == levels(df$group)[i]) %>%
+      select(group, rating, verb)
+    # want rating per verb, spread uses per-group name as rating column
+    df_temp <- spread(df_temp, key = group, value = rating)
+    df_temp <- df_temp[,c(2,1)]
+    # rename the verb columns to include group abbreviations
+    colnames(df_temp)[2] <- paste(colname[i])
+    # order them by highest to lowest rating
+    df_temp <- df_temp[order(-df_temp[,1]),]
+    df_temp$rank <- c(1:16)
+    # make into data.table for easy merging
+    df_temp <- data.table(df_temp, key = "rank")
+    # if first loop, make a new dataframe
+    if(i == 1)
+    {
+      df_new <- df_temp
+    }
+    # else, merge the temp into the created dataframe
+    else
+    {
+      df_new <- df_new[df_temp]
+    }
+  }
+  #  don't need rank anymore now that the table is finished
+  df_new <- df_new %>%
+    select(-rank)
+  # df_new has the verbs ranked by rating per group
+  return(df_new)
+}
+causgrouped <- ratingpergroup(caus, colname)
+pscausgrouped <- ratingpergroup(pscaus, colname)
+transgrouped <- ratingpergroup(trans, colname)
+# export this to csv
+write.csv(causgrouped, file = "causratingranked.csv")
+write.csv(pscausgrouped, file = "pscausgratingranked.csv")
+write.csv(transgrouped, file = "transratingranked.csv")
+```

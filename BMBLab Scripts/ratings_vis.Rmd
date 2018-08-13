@@ -1,0 +1,515 @@
+---
+title: "Ratings Visualization"
+author: "Nelson Tian, Eve Higby"
+output: html_document
+---
+
+
+This file is the second of a series of three .Rmd files. The other files are:
+1. ratings_data.Rmd
+3. ratings_analysis.Rmd
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r item plots}
+# this chunk plots each verb with x as group and y as rating
+
+# make 16 color gradient from red to blue (one color per verb)
+redtoblue <- colorRampPalette(c("firebrick1", "deepskyblue"))
+# check hexadecimal values
+redtoblue(16)
+# check the gradient
+plot(rep(1,16), col = redtoblue(16), pch = 16, cex = 2)
+
+# plot one per condition
+causplot <- ggplot(caus, aes(x = group, y = rating, color = verb, group = verb)) +
+  geom_line() +
+  geom_point() +
+  xlab("Group") +
+  ylab("Rating") +
+  ggtitle("Average Ratings for Causative Verbs") +
+  scale_y_continuous(limits = c(1,5)) +
+  scale_color_manual(values = redtoblue(16)) +
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pscausplot <- ggplot(pscaus, aes(x = group, y = rating, color = verb, group = verb)) +
+  geom_line() +
+  geom_point() +
+  xlab("Group") +
+  ylab("Rating") +
+  ggtitle("Average Ratings for Ps-Causative Verbs, Ranked by Frequency") +
+  scale_y_continuous(limits = c(1,5)) +
+  scale_color_manual(values = redtoblue(16)) +
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+transplot <- ggplot(trans, aes(x = group, y = rating, color = verb, group = verb)) +
+  geom_line() +
+  geom_point() +
+  xlab("Group") +
+  ylab("Rating") +
+  ggtitle("Average Ratings for Transitive Verbs, Ranked by Frequency") +
+  scale_y_continuous(limits = c(1,5)) +
+  scale_color_manual(values = redtoblue(16)) +
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+
+# print the 3 plots
+causplot; pscausplot; transplot
+```
+
+```{r item plot export}
+# save recently made plots in pdf and png format
+
+# set up the pdf to save to
+pdf("ratings6gsorted.pdf", onefile = TRUE)
+# print the 3 plots INTO the pdf
+causplot
+pscausplot
+transplot
+# close the pdf
+dev.off()
+
+# save each to png files
+ggsave("caus_ratings6gavgverb.png", causplot, width = 8, height = 6)
+ggsave("pscaus_ratings6gsorted.png", pscausplot, width = 9, height = 6)
+ggsave("trans_ratings6gsorted.png", transplot, width = 9, height = 6)
+```
+
+
+```{r 3 group item plot}
+# this chunk makes the same rating-by-group per verb plot as the previous chunk, but with 3 groups and one condition (caus)
+# make a plot for each bilingual group with the two monolingual groups
+
+# examine caus plots with only 3 groups each for closer inspection
+# list of bilingual groups (including Spanish Control)
+BIL_list <- c("Heritage Speakers","Early Bilinguals","Late Bilinguals", "Spanish Controls")
+# plot each bilingual with Spanish (ES) on one end and English (EC) on the other
+for(bilingual in BIL_list)
+{
+  # make a set with monolinguals centered around bilingual group of choice
+  caus_temp <- caus %>%
+    filter(group %in% c(bilingual,"Ecuador Spanish","English Controls"))
+  # reorder group factor to Spanish, [Bilingual], English
+  caus_temp$group <- factor(caus_temp$group, levels = c("Ecuador Spanish",
+                                                        bilingual,
+                                                        "English Controls"))
+  # plot each bilingual vs monolinguals
+  plot_title <- paste("Causative Verbs, Monolinguals vs. ", bilingual, sep = "")
+  BIL_plot <- ggplot(caus_temp, aes(x = group, y = rating, color = verb, group = verb)) +
+    geom_line() +
+    geom_point() +
+    xlab("Group") +
+    ylab("Rating") +
+    ggtitle(plot_title) +
+    scale_color_manual(values = redtoblue(16)) +
+    theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+    theme_classic()
+  print(BIL_plot)
+}
+```
+
+```{r 3 group item plot export}
+# export the recently made plots to png
+
+for(bilingual in BIL_list)
+{
+  # save each plot to png
+  # change the space in bilingual group to underscore
+  group_name <- gsub('([[:punct:]])|\\s+','_',bilingual)
+  # make the title lowercase
+  group_name <- sapply(group_name, tolower)
+  # title should be caus_ratings_[group_name] (e.g. "caus_ratings_early_bilinguals.png")
+  png_title <- paste("caus_ratings_", group_name, ".png", sep = "")
+  ggsave(png_title, BIL_plot, width = 8, height = 6)
+}
+```
+
+
+```{r demographics}
+# this chunk explores demographic info on the participants (age, sex, etc.)
+
+# demographic info into a csv file (age, n, mean rating)
+demo <- all %>%
+  group_by(group) %>%
+  summarise(cnt = n(),
+            subjects = length(unique(subject)),
+            min_age = min(age),
+            max_age = max(age),
+            avg_age = mean(age)
+            #avg_rating = mean(rating, na.rm = TRUE)
+            )
+colnames(demo) = c("Group", "n", "Subjects", "Min Age", "Max Age", "Mean Age")
+write.csv(demo,"demo.csv")
+
+
+# Summarize age by participant
+part.age <- summarySE(all, measurevar="age", 
+                      groupvars = c("subject", "group"),
+                      na.rm = TRUE)
+
+# Summarize age by group
+group.age <- summarySE(part.age, measurevar="age", 
+                       groupvars = c("group"),
+                       na.rm = TRUE)
+
+# Box plot
+part.age.plt <- ggplot(part.age, aes(x=group, y=age, fill=group)) + 
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Paired") +
+  xlab("Group") + ylab("Age") +
+  ggtitle("Ages across Groups") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+part.age.plt
+
+# Summarize sex by participant
+part.sex <- summarySE(all, measurevar="rating", 
+                      groupvars = c("subject", "group", "sex"),
+                      na.rm = TRUE)
+
+# Bar plot
+part.sex.plt <- ggplot(part.sex, aes(sex, group = group, fill=group)) +
+  geom_bar(
+    colour = "black", # contour around each bar
+    size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_brewer(palette = "Paired") +
+  xlab("Sex") + ylab("N") +
+  ggtitle("Sex Distributions across Groups") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+part.sex.plt
+
+### Ratings
+
+cond.colors <- c("indianred3", "steelblue3", "mediumseagreen", "burlywood1", "burlywood2", "burlywood3", "lightsalmon")
+
+# Mean rating per participant
+pRat <- summarySE(all, measurevar="rating", 
+                  groupvars = c("subject", "group"),
+                  na.rm = TRUE)
+
+# Bar chart
+pRat.plt <- ggplot(pRat, aes(x = subject, y = rating)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           fill = "slategray3",
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  xlab("Participant") + ylab("Mean Rating") +
+  ggtitle("Mean Rating for each Participant") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.plt
+
+# Mean rating per participant and condition
+pRat.cond <- summarySE(all, measurevar="rating", 
+                       groupvars = c("subject", "group", "condition"),
+                       na.rm = TRUE)
+
+# Box plot
+pRat.cond.plt <- ggplot(pRat.cond, aes(x=condition, y=rating, fill=condition)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=cond.colors) +
+  xlab("Condition") + ylab("Mean Rating") +
+  ggtitle("Mean Rating by Condition") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.cond.plt
+
+# Mean rating by condition
+rat.cond <- summarySE(pRat.cond, measurevar="rating", 
+                      groupvars = c("condition"),
+                      na.rm = TRUE)
+
+# Bar plot
+rat.cond.plt <- ggplot(rat.cond, aes(x = condition, y = rating, fill = condition)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_manual(values=cond.colors) +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  geom_errorbar(aes(ymin=rating-ci, ymax=rating+ci), width=.2,
+                position = position_dodge(0.9)) +
+  xlab("Condition") + ylab("Mean Rating") +
+  ggtitle("Mean Rating for each Condition") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+rat.cond.plt
+
+# Mean rating per group and condition
+gRat.cond <- summarySE(pRat.cond, measurevar="rating", 
+                       groupvars = c("group", "condition"),
+                       na.rm = TRUE)
+
+# Bar plot
+gRat.cond.plt <- ggplot(gRat.cond, aes(x = condition, y = rating, fill=group, group=group)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_brewer(palette = "Paired") +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  geom_errorbar(aes(ymin=rating-ci, ymax=rating+ci), width=.2,
+                position = position_dodge(0.9)) +
+  xlab("Condition") + ylab("Mean Rating") +
+  ggtitle("Mean Rating for each Group & Condition") + 
+  theme(plot.title = element_text(hjust=0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+gRat.cond.plt
+
+
+### 3 Conditions
+
+# Subset Causative, Pseudo-causative, & Transitive
+all.3cond <- subset(all, condition %in% c("Causative", "Pseudo-causative", "Transitive")) 
+
+# Mean rating per participant and condition
+pRat.3cond <- summarySE(all.3cond, measurevar="rating", 
+                        groupvars = c("subject", "group", "condition"),
+                        na.rm = TRUE)
+
+# Mean rating per participant and condition
+gRat.3cond <- summarySE(pRat.3cond, measurevar="rating", 
+                        groupvars = c("group", "condition"),
+                        na.rm = TRUE)
+
+# Bar plot
+gRat.3cond.plt <- ggplot(gRat.3cond, aes(x = condition, y = rating, fill=group, group=group)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_brewer(palette = "Paired") +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  geom_errorbar(aes(ymin=rating-ci, ymax=rating+ci), width=.2,
+                position = position_dodge(0.9)) +
+  xlab("Condition") + ylab("Mean Rating") +
+  ggtitle("Mean Rating for each Group & Condition") + 
+  theme(plot.title = element_text(hjust=0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+gRat.3cond.plt
+
+# Box plot
+pRat.3cond.plt <- ggplot(pRat.3cond, aes(x=condition, y=rating, fill=group)) + 
+  geom_boxplot() + 
+  scale_fill_brewer(palette = "Paired") +
+  xlab("Condition") + ylab("Rating") +
+  ggtitle("Rating by Condition") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.3cond.plt
+
+# All participants
+pRat.3cond.s.plt <- ggplot(pRat.3cond, aes(x = subject, y = rating, fill=condition)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.2 # width of the contour line
+  ) + 
+  scale_fill_manual(values=cond.colors) +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  xlab("Participant") + ylab("Mean Rating") +
+  ggtitle("Mean Rating for each Participant") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.3cond.s.plt
+
+
+## Causative only
+
+# Subset causative condition
+rat.caus <- all[which(all$condition == 'Causative'),]
+
+# Order by group
+rat.caus <- rat.caus[order(rat.caus$group),]
+
+# Mean rating per participant
+pRat.caus <- summarySE(rat.caus, measurevar="rating", 
+                       groupvars = c("subject", "group", "age", "sex"),
+                       na.rm = TRUE)
+
+# All participants
+pRat.caus.plt <- ggplot(pRat.caus, aes(x = subject, y = rating, fill=group)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_brewer(palette = "Paired") +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  xlab("Participant") + ylab("Mean Rating") +
+  ggtitle("Mean Causative Rating for each Participant") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.caus.plt
+
+## Pseudo-causative only
+
+# Subset pseudo-causative condition
+rat.pscaus <- all[which(all$condition == 'Pseudo-causative'),]
+
+# Order by group
+rat.pscaus <- rat.pscaus[order(rat.pscaus$group),]
+
+# Mean rating per participant
+pRat.pscaus <- summarySE(rat.pscaus, measurevar="rating", 
+                       groupvars = c("subject", "group", "age", "sex"),
+                       na.rm = TRUE)
+
+# All participants
+pRat.pscaus.plt <- ggplot(pRat.pscaus, aes(x = subject, y = rating, fill=group)) +
+  geom_bar(stat = "identity", 
+           position = "dodge", 
+           colour = "black", # contour around each bar
+           size = 0.7 # width of the contour line
+  ) + 
+  scale_fill_brewer(palette = "Paired") +
+  coord_cartesian(ylim=c(1.0, 5.0)) +
+  xlab("Participant") + ylab("Mean Rating") +
+  ggtitle("Mean Pseudo-causative Rating for each Participant") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic()
+pRat.pscaus.plt
+
+# remake boxplot with only caus
+pRat.3cond2 <- pRat.3cond %>%
+  filter(condition == "Causative")
+pRat.3cond.plt2 <- ggplot(pRat.3cond2, aes(x=group, y=rating, fill=group)) + 
+  geom_boxplot() + 
+  scale_fill_manual(values=c("slategray2", "steelblue1", "steelblue3",
+                             "palegreen","palegreen3","palegreen4")) +
+  xlab("Group") + ylab("Mean Rating") +
+  ggtitle("Rating by Group") + 
+  theme(plot.title = element_text(hjust = 0.5, lineheight=.8, face="bold")) +
+  theme_classic() + 
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+pRat.3cond.plt2
+```
+
+```{r demographics export}
+# make a pdf
+pdf("6group_demo_plots.pdf", onefile = TRUE)
+part.age.plt
+part.sex.plt
+pRat.plt
+pRat.cond.plt
+rat.cond.plt
+gRat.cond.plt
+gRat.3cond.plt
+pRat.3cond.plt
+pRat.3cond.s.plt
+pRat.caus.plt
+pRat.pscaus.plt
+dev.off()
+
+# save separately to png because plot is hard to see in pdf
+ggsave("3condrating.png",pRat.3cond.s.plt,width = 12, height = 10)
+
+# save remade group boxplot separately
+ggsave("groupboxplot.png", pRat.3cond.plt2, width = 9, height = 6)
+```
+
+```{r corr scatters}
+# this chunk is for visualizing the correlation between certain variables
+
+# create correlation scatterplots between Spanish freq and rating
+pdf("corrscatter.pdf", onefile = T)
+c = ggscatter(caus, x = "spnfreq", y = "rating", add = "reg.line",
+              facet.by = "group", conf.int = T, conf.level = .95,
+              cor.coef = T)
+ggpar(c, main = "Causative Spanish Frequencies vs Rating")
+p = ggscatter(pscaus, x = "spnfreq", y = "rating", add = "reg.line",
+          facet.by = "group", conf.int = T, conf.level = .95,
+          cor.coef = T)
+ggpar(p, main = "Pseudo-Causative Spanish Frequencies vs Rating")
+t = ggscatter(trans, x = "spnfreq", y = "rating", add = "reg.line",
+          facet.by = "group", conf.int = T, conf.level = .95,
+          cor.coef = T)
+ggpar(t, main = "Transitive Spanish Frequencies vs Rating")
+dev.off()
+
+# separated by group does not give a strong correlation in each individual group, but altogether they do
+pdf("zipfcorr.pdf", onefile = T)
+c = ggscatter(caus, x = "zipf", y = "rating", add = "reg.line",
+              facet.by = "group", conf.int = T, conf.level = .95,
+              cor.coef = T)
+ggpar(c, main = "Causative Spanish Frequencies vs Rating, Separated by Group")
+
+c2 = ggscatter(caus, x = "zipf", y = "rating", add = "reg.line",
+              conf.int = T, conf.level = .95,
+              cor.coef = T)
+ggpar(c2, main = "Causative Spanish Frequencies vs Rating")
+dev.off()
+
+
+# spread each group into its own column for next correlation plots
+caus2 <- caus %>%
+  group_by(verb, group) %>%
+  summarise(rating) %>%
+  select(group, rating, verb)
+caus2 <- spread(caus2, key = group, value = rating)
+names(caus2) <- c("verb", "HS", "EB", "LB", "SC", "ES", "EC")
+
+# correlations between bilingual ratings and other bilingual groups
+#pdf("BILvBILcorr.pdf", onefile = T)
+c2hseb <- ggscatter(caus2, x = "HS", y = "EB",
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, label = "verb")
+ggpar(c2hseb, main = "Correlation Between HS and EB", xlim = c(1,5), ylim = c(1,5))
+c2hslb <- ggscatter(caus2, x = "HS", y = "LB",
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, label = "verb")
+ggpar(c2hslb, main = "Correlation Between HS and LB", xlim = c(1,5), ylim = c(1,5))
+c2eblb <- ggscatter(caus2, x = "EB", y = "LB",
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, label = "verb")
+ggpar(c2eblb, main = "Correlation Between EB and LB", xlim = c(1,5), ylim = c(1,5))
+# dev.off()
+
+# correlations between sp monolingual ratings and bilinguals
+#pdf("SPvBILcorr.pdf", onefile = T)
+c2echs <- ggscatter(caus2, x = "EC", y = "HS", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "English Controls", ylab = "Heritage Speakers")
+ggpar(c2echs, main = "Correlation Between EC and HS")
+c2eceb <- ggscatter(caus2, x = "EC", y = "EB", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "English Controls", ylab = "Early Bilinguals")
+ggpar(c2eceb, main = "Correlation Between EC and EB")
+c2eclb <- ggscatter(caus2, x = "EC", y = "LB", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "English Controls", ylab = "Late Bilinguals")
+ggpar(c2eclb, main = "Correlation Between EC and LB")
+#dev.off()
+
+# correlations between en monolingual ratings and bilinguals
+#pdf("ENvBILcorr.pdf", onefile = T)
+c2eshs <- ggscatter(caus2, x = "ES", y = "HS", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "Ecuador Spanish", ylab = "Heritage Speakers")
+ggpar(c2eshs, main = "Correlation Between ES and HS")
+c2eseb <- ggscatter(caus2, x = "ES", y = "EB", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "Ecuador Spanish", ylab = "Early Bilinguals")
+ggpar(c2eseb, main = "Correlation Between ES and EB")
+c2eslb <- ggscatter(caus2, x = "ES", y = "LB", 
+                add = "reg.line", conf.int = T, conf.level = .95,
+                cor.coef = T, xlab = "Ecuador Spanish", ylab = "Late Bilinguals")
+ggpar(c2eslb, main = "Correlation Between ES and LB")
+#dev.off()
+
+c2tot <- grid.arrange(c2echs, c2eceb, c2eclb,
+                      c2eshs, c2eseb, c2eslb, ncol = 3,
+                      top = text_grob("Correlation between Monolingual and Bilingual Ratings"))
+ggsave("correlation.png", c2tot, width = 9, height = 6)
+```
