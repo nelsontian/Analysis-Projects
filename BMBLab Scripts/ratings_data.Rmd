@@ -6,8 +6,11 @@ output: html_document
 
 
 This file is the first of a series of three .Rmd files. The other files are:
+
 2. ratings_vis.Rmd
+
 3. ratings_analysis.Rmd
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
