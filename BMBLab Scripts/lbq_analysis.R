@@ -1,13 +1,16 @@
 # this file is another analysis using language background variables (lbq)
 # this is a continuation of the three-part ratings analysis
 
+setwd('C:/Users/Nelson/Desktop/BMBLAB')
+
 # bring lbq (language background variables) into analysis
 lbq <- read.csv("lbq_data_cleaned.csv")
 colnames(lbq) = c("subject","thinking",
                   "l1read","l1write","l1listen","l1speak","l1vocab","l1grammar","l1avg",
                   "l2read","l2write","l2listen","l2speak","l2vocab","l2grammar","l2avg",
                   "l3","multiYN","multi","CultureUS","CultureH","MoveUS","EngAoA",
-                  "TVSp","MovSp","MediaSp","AvgSp","TVEn","MovEn","MediaEn","AvgEn")
+                  "TVSp","MovSp","MediaSp","AvgSp","TVEn","MovEn","MediaEn","AvgEn",
+                  "TVSp_En","MovSp_En","MediaSp_En","AvgSp_En")
 
 # subject-level analysis
 subjects <- all %>%
@@ -17,8 +20,10 @@ subjects <- all %>%
             sdrating = sd(rating, na.rm = T))
 subjects <- merge(subjects, lbq, by = "subject")
 
-# plot distribution of exposure variables (TVSp, ..., AvgEn)
-for(i in 27:34)
+# plot distribution of all exposure variables (TVSp, ..., AvgEn)
+pdf("exposurevarsdiff.pdf", onefile = TRUE)
+# i for column ids of exp. var
+for(i in 35:38)
 {
   # histogram
   x <- subjects[[i]]
@@ -33,7 +38,37 @@ for(i in 27:34)
   plot(density(subjects[[i]], na.rm = T),
        main = c(paste(colnames(subjects)[i]), " Exposure"))
 }
+# saved to pdf
+dev.off()
 
+pdf("exposurevarsgrouped.pdf", onefile = TRUE)
+# i for column ids of exp. var
+# for(i in 35:38)
+# {
+#   # histogram
+#   x <- subjects[[i]]
+#   x <- x[!is.na(x)]
+#   h <- hist(x, breaks = 10, col = "grey",
+#             main = c(paste(colnames(subjects)[i]), " Exposure"))
+#   xfit <- seq(min(x), max(x), length = 40) 
+#   yfit <- dnorm(xfit, mean = mean(x), sd = sd(x)) 
+#   yfit <- yfit*diff(h$mids[1:2])*length(x) 
+#   lines(xfit, yfit, col = "black", lty = 2, lwd = 2)
+#   # density plot
+#   plot(density(subjects[[i]], na.rm = T),
+#        main = c(paste(colnames(subjects)[i]), " Exposure"))
+# }
+for(i in 35:38)
+{
+  cname = colnames(subjects[i])
+  g = ggplot(data = subjects, aes(get(cname), color = group)) +
+    geom_density() +
+    xlab(cname) +
+    theme_classic()
+  print(g)
+}
+# saved to pdf
+dev.off()
 
 # create a new categorical variable for language proficiency
 attach(subjects)
@@ -90,8 +125,8 @@ all_new <- merge(x = all, y = allverbn, by = "verb", all.x = TRUE)
 # only caus
 caus_new <- all_new %>%
   filter(condition == "Causative")
-# no lbq for Ecuador, will remove by merging
-caus_new <- merge(caus_new, lbq, by = "subject")
+# # no lbq for Ecuador, will remove by merging
+# caus_new <- merge(caus_new, lbq, by = "subject")
 caus_bil <- caus_new %>%
   filter(group %in% c("Heritage Speakers", "Early Bilinguals", "Late Bilinguals"))
 
@@ -122,10 +157,13 @@ zipf_only <- glmer(rating ~ zipf + (1|verb) + (1|subject), family = poisson, dat
 caus_new$rating <- factor(caus_new$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 caus_bil$rating <- factor(caus_bil$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 
+caus_new2 <- within(caus_new, group <- relevel(group, ref = "Heritage Speakers"))
+
 # rating is now a categorical variable, use clmm for ordinal mixed effects regression
-zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_new)
-zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_new)
-zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_new)
+zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_new2)
+zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_new2)
+zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_new2)
+summary(zipf_clmm)
 
 # remove group labels, look closer at bilingual groups
 zipf_clmm <- clmm(rating ~ zipf + stimNum + EngAoA + MoveUS + (1|verb) + (1|subject), data = caus_bil)
