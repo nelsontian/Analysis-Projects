@@ -115,31 +115,55 @@ ggplot(subjects, aes(x=l2avg)) + geom_histogram(binwidth=.5) +
   ggtitle("L1 proficiency by group")
 dev.off()
 
-# trim out fat from lbq
-modellbq <- lbq %>%
-  select(subject,MoveUS,EngAoA,l1avg,l2avg,
-         TVSp,MovSp,MediaSp,TVEn,MovEn,MediaEn)
+# # trim out fat from lbq
+# modellbq <- lbq %>%
+#   select(subject,MoveUS,EngAoA,l1avg,l2avg,
+#          TVSp,MovSp,MediaSp,TVEn,MovEn,MediaEn)
 
 # merge trial level data with verb data
 all_new <- merge(x = all, y = allverbn, by = "verb", all.x = TRUE)
 # only caus
 caus_new <- all_new %>%
   filter(condition == "Causative")
-# # no lbq for Ecuador, will remove by merging
-# caus_new <- merge(caus_new, lbq, by = "subject")
 caus_bil <- caus_new %>%
   filter(group %in% c("Heritage Speakers", "Early Bilinguals", "Late Bilinguals"))
+
+
+# correlation between stimNum and rating PER GROUP
+stim <- data.table(caus_new)
+# one missing value for rating in HS group, remove for now
+stim <- stim[!is.na(stim$rating), ]
+stimcorr <- stim[, .(scorr = cor(stimNum, rating)), by = group]
+stimcorr
+
+# # no lbq for Ecuador, will remove by merging
+# caus_new <- merge(caus_new, lbq, by = "subject")
+# caus_bil <- merge(caus_bil, lbq, by = "subject")
 
 # correlations between different variables
 caus_corr <- caus_bil %>%
   select(zipf,stimNum,EngAoA,MoveUS,l1avg,l2avg,rating)
 caus_res <- cor(caus_corr, use = "complete.obs")
 round(caus_res, 2)
+
 # another one for language exposure
-caus_corr2 <- caus_bil %>%
+caus_correxp <- caus_bil %>%
   select(TVSp,MovSp,MediaSp,TVEn,MovEn,MediaEn,rating)
-caus_res2 <- cor(caus_corr2, use = "complete.obs")
-round(caus_res2, 2)
+caus_resexp <- cor(caus_correxp, use = "complete.obs")
+round(caus_resexp, 2)
+
+# grouped exposure correlations
+caus_corrdiff <- caus_new %>%
+  select(group,TVSp_En,MovSp_En,MediaSp_En,AvgSp_En)
+for(i in 1:4)
+{
+  c <- caus_corrdiff %>%
+    filter(group == levels(caus_new$group)[i]) %>%
+    select(-group)
+  print(levels(caus_new$group)[i])
+  print(round(cor(c, use = "complete.obs"), 2))
+}
+
 
 # linear mixed effects models
 zipf_lm <- lmer(rating ~ group + (1|verb) + (1|subject), data = caus_new)
@@ -157,12 +181,12 @@ zipf_only <- glmer(rating ~ zipf + (1|verb) + (1|subject), family = poisson, dat
 caus_new$rating <- factor(caus_new$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 caus_bil$rating <- factor(caus_bil$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 
-caus_new2 <- within(caus_new, group <- relevel(group, ref = "Heritage Speakers"))
+caus_newHS <- within(caus_new, group <- relevel(group, ref = "Heritage Speakers"))
 
 # rating is now a categorical variable, use clmm for ordinal mixed effects regression
-zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_new2)
-zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_new2)
-zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_new2)
+zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_newHS)
+zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_newHS)
+zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_newHS)
 summary(zipf_clmm)
 
 # remove group labels, look closer at bilingual groups
