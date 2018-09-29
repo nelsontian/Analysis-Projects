@@ -177,7 +177,7 @@ all$verb <- factor(all$verb, levels = c('1','2','3','4','5','6','7','8','9','10'
 all$group = factor(all$group, levels = c(levels(all$group)[1:4], levels(all$group)[6], levels(all$group)[5]))
 
 # make a resulting excel file called "ratings_full.csv"
-write.csv(all, "ratings_full.csv")
+write.csv(all, "ratings_full.csv", row.names = FALSE)
 ```
 
 ```{r verb data}
@@ -233,6 +233,8 @@ allverbn <- within(allverbn, {
   engverb <- factor(engverb)
   spnverb <- factor(spnverb)
 })
+
+write.csv(allverbn, "all_verbs.csv", row.names = FALSE)
 ```
 
 ```{r condition data}
