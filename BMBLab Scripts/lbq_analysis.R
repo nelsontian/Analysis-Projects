@@ -12,6 +12,24 @@ colnames(lbq) = c("subject","thinking",
                   "TVSp","MovSp","MediaSp","AvgSp","TVEn","MovEn","MediaEn","AvgEn",
                   "TVSp_En","MovSp_En","MediaSp_En","AvgSp_En")
 
+# read in all if not in environment
+if(!exists("all", inherits = FALSE))
+{
+  all <- read.csv("ratings_full.csv")
+  all$group <- factor(all$group, levels = c("Heritage Speakers","Early Bilinguals",
+                                            "Late Bilinguals","Spanish Controls",
+                                            "Ecuador Spanish","English Controls"))
+}
+
+if(!exists("allverbn", inherits = FALSE))
+{
+  allverbn <- read.csv("all_verbs.csv")
+  allverbn <- within(allverbn, {
+    engverb <- factor(engverb)
+    spnverb <- factor(spnverb)
+  })
+}
+
 # subject-level analysis
 subjects <- all %>%
   filter(condition == "Causative") %>%
@@ -19,6 +37,19 @@ subjects <- all %>%
   summarise(avgrating = mean(rating, na.rm = T),
             sdrating = sd(rating, na.rm = T))
 subjects <- merge(subjects, lbq, by = "subject")
+
+# make categorical versions of exposure variable
+subjects$TV <- ifelse(subjects$TVSp_En > 0, 'Sp', 'En')
+subjects$Mov <- ifelse(subjects$MovSp_En > 0, 'Sp', 'En')
+subjects$Media <- ifelse(subjects$MediaSp_En > 0, 'Sp', 'En')
+
+# make categories for how exposure dist (3Sp, 2En, etc.)
+subjects$spfreq <- rowSums(subjects == 'Sp')
+subjects$totalexp <- ifelse(subjects$spfreq == 3, '3Sp',
+                            ifelse(subjects$spfreq == 2, '2Sp',
+                                   ifelse(subjects$spfreq == 1, '2En',
+                                          '3En')))
+subjects <- subset(subjects, select = -spfreq)
 
 # plot distribution of all exposure variables (TVSp, ..., AvgEn)
 pdf("exposurevarsdiff.pdf", onefile = TRUE)
@@ -127,14 +158,24 @@ caus_new <- all_new %>%
   filter(condition == "Causative")
 caus_bil <- caus_new %>%
   filter(group %in% c("Heritage Speakers", "Early Bilinguals", "Late Bilinguals"))
+# only pscaus
+pscaus_new <- all_new %>%
+  filter(condition == "Pseudo-causative")
 
 
-# correlation between stimNum and rating PER GROUP
-stim <- data.table(caus_new)
+# correlation between stimNum and rating PER GROUP for caus
+stim_caus <- data.table(caus_new)
 # one missing value for rating in HS group, remove for now
-stim <- stim[!is.na(stim$rating), ]
-stimcorr <- stim[, .(scorr = cor(stimNum, rating)), by = group]
-stimcorr
+stim_caus <- stim_caus[!is.na(stim_caus$rating), ]
+stim_causcorr <- stim_caus[, .(scorr = cor(stimNum, rating)), by = group]
+# stim_causcorr
+
+# correlation between stimNum and rating PER GROUP for pscaus
+stim_pscaus <- data.table(pscaus_new)
+# one missing value for rating in HS group, remove for now
+stim_pscaus <- stim_pscaus[!is.na(stim_pscaus$rating), ]
+stim_pscauscorr <- stim_pscaus[, .(scorr = cor(stimNum, rating)), by = group]
+stim_pscauscorr
 
 # # no lbq for Ecuador, will remove by merging
 # caus_new <- merge(caus_new, lbq, by = "subject")
@@ -181,12 +222,12 @@ zipf_only <- glmer(rating ~ zipf + (1|verb) + (1|subject), family = poisson, dat
 caus_new$rating <- factor(caus_new$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 caus_bil$rating <- factor(caus_bil$rating, ordered = TRUE, levels = c("1","2","3","4","5"))
 
-caus_newHS <- within(caus_new, group <- relevel(group, ref = "Heritage Speakers"))
+caus_new <- within(caus_new, group <- relevel(group, ref = "Heritage Speakers"))
 
 # rating is now a categorical variable, use clmm for ordinal mixed effects regression
-zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_newHS)
-zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_newHS)
-zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_newHS)
+zipf_clmm <- clmm(rating ~ group + (1|verb) + (1|subject), data = caus_new)
+zipf_clmm <- clmm(rating ~ zipf + group + (1|verb) + (1|subject), data = caus_new)
+zipf_clmm <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = caus_new)
 summary(zipf_clmm)
 
 # remove group labels, look closer at bilingual groups
@@ -198,3 +239,13 @@ zipf_clmm <- clmm(rating ~ TVSp + (1|verb) + (1|subject), data = caus_bil)
 summary(zipf_clmm)
 zipf_clmm <- clmm(rating ~ MovSp + (1|verb) + (1|subject), data = caus_bil)
 summary(zipf_clmm)
+
+
+
+# snippet for error checking
+clmm_data <- caus_new %>%
+  select(rating, zipf, stimNum, group, verb, subject)
+clmm_ex <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = clmm_data)
+write.csv(clmm_data, "clmm_data.csv", row.names = FALSE)
+
+write.csv(subjects, "subject_data.csv", row.names = FALSE)
