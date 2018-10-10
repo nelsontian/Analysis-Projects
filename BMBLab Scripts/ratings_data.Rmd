@@ -70,13 +70,12 @@ EB <- subset(ratings, subject %in% c(102,108,110,114,116,118:122,203,213,215,222
 EB$group <- 2
 
 # Late Bilinguals are group 2 that aren't used yet
-LB <- subset(ratings, subject %in% c(201,202,204,205,206,208,210,211,212,218,220,221))
+LB <- subset(ratings, subject %in% c(201,202,204,205,208,210,211,212,218,220,221,302))
 
 LB$group <- 3
 
-  # All Spanish monolinguals
-SM <- subset(ratings, group == 3)
-
+# All Spanish monolinguals
+SM <- subset(ratings, subject %in% c(206,301,303,304,305,306,307,309,310,311,312,313,314,315,316,318,319,320))
 # Spanish monolinguals with ERP data
 #SM2 <- subset(ratings, subject %in% c(301, 303, 304, 305, 306, 308, 309, 311, 312, 314, 315, 316, 317, 318, 322))
 
