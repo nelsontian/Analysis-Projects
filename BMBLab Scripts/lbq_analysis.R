@@ -10,7 +10,7 @@ colnames(lbq) = c("subject","thinking",
                   "l2read","l2write","l2listen","l2speak","l2vocab","l2grammar","l2avg",
                   "l3","multiYN","multi","CultureUS","CultureH","MoveUS","EngAoA",
                   "TVSp","MovSp","MediaSp","AvgSp","TVEn","MovEn","MediaEn","AvgEn",
-                  "TVSp_En","MovSp_En","MediaSp_En","AvgSp_En")
+                  "TVSp_En","MovSp_En","MediaSp_En","AvgSp_En","ReadSp","ReadEn","ReadSp_En")
 
 # read in all if not in environment
 if(!exists("all", inherits = FALSE))
@@ -38,17 +38,34 @@ subjects <- all %>%
             sdrating = sd(rating, na.rm = T))
 subjects <- merge(subjects, lbq, by = "subject")
 
+# create a new categorical variable for language proficiency
+attach(subjects)
+subjects$proflevel[l1avg >= 6] <- "Strong"
+subjects$proflevel[l1avg >= 3 & l1avg < 6] <- "Medium"
+subjects$proflevel[l1avg < 3] <- "Weak"
+detach(subjects)
+# same with cultural affiliation
+attach(subjects)
+subjects$culturehlevel[CultureH >= 6] <- "Strong"
+subjects$culturehlevel[CultureH >= 3 & CultureH < 6] <- "Medium"
+subjects$culturehlevel[CultureH < 3] <- "Weak"
+detach(subjects)
+
 # make categorical versions of exposure variable
+# same exposure coded as En
 subjects$TV <- ifelse(subjects$TVSp_En > 0, 'Sp', 'En')
 subjects$Mov <- ifelse(subjects$MovSp_En > 0, 'Sp', 'En')
 subjects$Media <- ifelse(subjects$MediaSp_En > 0, 'Sp', 'En')
+subjects$Read <- ifelse(subjects$MediaSp_En > 0, 'Sp', 'En')
 
-# make categories for how exposure dist (3Sp, 2En, etc.)
-subjects$spfreq <- rowSums(subjects == 'Sp')
-subjects$totalexp <- ifelse(subjects$spfreq == 3, '3Sp',
-                            ifelse(subjects$spfreq == 2, '2Sp',
-                                   ifelse(subjects$spfreq == 1, '2En',
-                                          '3En')))
+# make categories for how exposure dist (4Sp, 3En, etc.)
+subjects$spfreq <- rowSums(subjects[42:45] == 'Sp')
+subjects$totalexp <- ifelse(subjects$spfreq == 4, '4Sp',
+                            ifelse(subjects$spfreq == 3, '3Sp',
+                                   ifelse(subjects$spfreq == 2, 'Even',
+                                          ifelse(subjects$spfreq == 1, '3En',
+                                                 '4En'))))
+# remove spfreq (temp variable)
 subjects <- subset(subjects, select = -spfreq)
 
 # plot distribution of all exposure variables (TVSp, ..., AvgEn)
@@ -72,8 +89,10 @@ for(i in 35:38)
 # saved to pdf
 dev.off()
 
+# with groups
 pdf("exposurevarsgrouped.pdf", onefile = TRUE)
-# i for column ids of exp. var
+# # old code using base package
+# # i for column ids of exp. var
 # for(i in 35:38)
 # {
 #   # histogram
@@ -100,19 +119,6 @@ for(i in 35:38)
 }
 # saved to pdf
 dev.off()
-
-# create a new categorical variable for language proficiency
-attach(subjects)
-subjects$proflevel[l1avg >= 6] <- "Strong"
-subjects$proflevel[l1avg >= 3 & l1avg < 6] <- "Medium"
-subjects$proflevel[l1avg < 3] <- "Weak"
-detach(subjects)
-# same with cultural affiliation
-attach(subjects)
-subjects$culturehlevel[CultureH >= 6] <- "Strong"
-subjects$culturehlevel[CultureH >= 3 & CultureH < 6] <- "Medium"
-subjects$culturehlevel[CultureH < 3] <- "Weak"
-detach(subjects)
 
 # visualize data
 ggplot(subjects) +
@@ -248,4 +254,4 @@ clmm_data <- caus_new %>%
 clmm_ex <- clmm(rating ~ zipf + stimNum + group + (1|verb) + (1|subject), data = clmm_data)
 write.csv(clmm_data, "clmm_data.csv", row.names = FALSE)
 
-write.csv(subjects, "subject_data.csv", row.names = FALSE)
+write.csv(subjects, "subject_data.csv", na = "", row.names = FALSE)
